@@ -1,0 +1,20 @@
+# ===============================
+# 🧪 Scenario: redis_cluster_ccs_kafka
+# Description: Integration test for config-poller with Redis cluster, Kafka, and mocked CCS
+# ===============================
+
+[meta]
+name = "redis_cluster_ccs_kafka"
+description = "Test config-poller with all major integrations and simulate failures"
+timeout_seconds = 60
+labels = ["ci", "redis", "kafka", "ccs", "resilience"]
+
+# ===============================
+# 🚀 Services
+# ===============================
+
+[services.redis_cluster]
+image = "grokzen/redis-cluster:6.0.7"
+ports = [7000, 7001, 7002, 7003, 7004, 7005]
+wait_for_log = "Ready to accept connections"
+alias = "redis"

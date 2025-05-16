@@ -1,0 +1,19 @@
+[package]
+name = "ozymandias"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+members = ["ozymandias_core"]
+resolver = "2"
+
+[workspace.dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_with = "3.6"
+toml = "0.8"
+tokio = { version = "1", features = ["full"] }
+error-stack = "0.5.0"
+thiserror = "2.0.12"
+
+[dependencies]
+ozymandias_core = { path = "ozymandias_core" }
