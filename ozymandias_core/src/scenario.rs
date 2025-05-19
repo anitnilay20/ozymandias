@@ -34,6 +34,8 @@ pub struct Services {
 #[derive(Debug, Deserialize)]
 pub struct Service {
     pub image: String,
+    pub tag: String,
+    pub container_name: Option<String>,
     pub ports: Vec<u16>,
     pub wait_for_log: Option<String>,
     pub alias: Option<String>,

@@ -1,15 +1,48 @@
-// use testcontainers::{
-//     core::{IntoContainerPort, WaitFor},
-//     runners::AsyncRunner,
-//     GenericImage,
-// };
+use testcontainers::{
+    core::{IntoContainerPort, WaitFor},
+    runners::AsyncRunner,
+    ContainerAsync, GenericImage,
+};
 
-// #[tokio::test]
-// async fn test_redis() {
-//     let _container = GenericImage::new("redis", "7.2.4")
-//         .with_exposed_port(6379.tcp())
-//         .with_wait_for(WaitFor::message_on_stdout("Ready to accept connections"))
-//         .start()
-//         .await
-//         .unwrap();
-// }
+use crate::error::{OzymandiasError, Result};
+use crate::scenario::Service;
+
+use error_stack::Report;
+
+pub async fn start_service(service: Service) -> Result<ContainerAsync<GenericImage>> {
+    let mut container_builder = GenericImage::new(service.image, service.tag);
+
+    for port in &service.ports {
+        container_builder = container_builder.with_exposed_port(port.tcp());
+    }
+
+    container_builder.with_wait_for(WaitFor::message_on_stdout(
+            service.wait_for_log.unwrap_or_default(),
+        ))
+        .start()
+        .await
+        .map_err(|e| {
+            eprintln!("Failed to start container: {}", e);
+            Report::new(OzymandiasError::ContainerStartError(e))
+        })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_start_service() {
+        let service = Service {
+            image: "grokzen/redis-cluster".to_string(),
+            tag: "6.0.7".to_string(),
+            container_name: None,
+            ports: vec![7000, 7001, 7002, 7003, 7004, 7005],
+            wait_for_log: Some("Ready to accept connections".to_string()),
+            alias: None,
+        };
+
+        let container = start_service(service).await;
+        assert!(container.is_ok());
+    }
+}
