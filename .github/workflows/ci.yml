@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    name: Test & Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+      - name: Install cargo-tarpaulin (for coverage)
+        run: cargo install cargo-tarpaulin
+      - name: Run tests
+        run: cargo test --workspace --all-features
+      - name: Collect coverage
+        run: cargo tarpaulin --workspace --all-features --out Xml
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./tarpaulin-report.xml
+          fail_ci_if_error: true
+
+  static-analysis:
+    name: Clippy & Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+      - name: Run clippy
+        run: cargo clippy --workspace --all-features -- -D warnings
+      - name: Check formatting
+        run: cargo fmt --all -- --check
