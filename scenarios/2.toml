@@ -1,0 +1,22 @@
+[services.redis_cluster]
+image = "grokzen/redis-cluster:6.0.7"
+ports = [7000, 7001, 7002, 7003, 7004, 7005]
+wait_for_log = "Ready to accept connections"
+alias = "redis"
+
+[situations.redis_cluster]
+at = "30s"
+status = "stop"
+
+[mock.api]
+endpoint = "http://mock-api:8080/config/:id"
+response = """
+{
+  "id": ":id",
+  "name": "mocked-config",
+  "version": 1,
+  "data": {
+    "key": "value"
+  }
+}
+"""
