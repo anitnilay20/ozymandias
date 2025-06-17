@@ -1,5 +1,5 @@
-use thiserror::Error;
 use error_stack::Result;
+use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum CLIError {

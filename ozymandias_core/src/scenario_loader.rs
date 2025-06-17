@@ -11,7 +11,7 @@ pub async fn load_scenario_from_toml(toml: &str) -> Result<Scenario> {
 pub async fn load_scenario_from_toml_file(file_path: &str) -> Result<Scenario> {
     let toml_content = fs::read_to_string(file_path)
         .await
-        .map_err(|e| OzymandiasError::FileError(e))?;
+        .map_err(OzymandiasError::FileError)?;
     let scenario: Scenario = load_scenario_from_toml(&toml_content).await?;
     Ok(scenario)
 }
