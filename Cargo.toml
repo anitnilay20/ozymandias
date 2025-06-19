@@ -1,10 +1,5 @@
-[package]
-name = "ozymandias"
-version = "0.1.0"
-edition = "2021"
-
 [workspace]
-members = [ "cli","ozymandias_core"]
+members = ["cli", "ozymandias_core"]
 resolver = "2"
 
 [workspace.dependencies]
@@ -16,6 +11,3 @@ error-stack = "0.5.0"
 thiserror = "2.0.12"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-
-[dependencies]
-ozymandias_core = { path = "ozymandias_core" }

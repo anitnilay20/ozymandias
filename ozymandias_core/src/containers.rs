@@ -22,19 +22,19 @@ pub async fn start_service(service: Service) -> Result<ContainerAsync<GenericIma
         ))
         .start()
         .await
-        .map_err(|e| {
-            eprintln!("Failed to start container: {}", e);
-            Report::new(OzymandiasError::ContainerStartError(e))
-        })
+        .map_err(|e| Report::new(OzymandiasError::ContainerStartError(e)))
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::scenario::ServiceType;
+
     use super::*;
 
     #[tokio::test]
     async fn test_start_service() {
         let service = Service {
+            service_type: ServiceType::RedisCluster,
             image: "grokzen/redis-cluster".to_string(),
             tag: Some("6.0.7".to_string()),
             container_name: None,

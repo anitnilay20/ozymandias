@@ -4,7 +4,7 @@ use std::collections::HashMap;
 #[derive(Debug, Deserialize)]
 pub struct Scenario {
     pub meta: Meta,
-    pub services: Services,
+    pub services: Vec<Service>,
     pub mocks: Option<Mocks>,
     pub events: Option<Events>,
     pub failures: Option<Vec<Failure>>,
@@ -21,18 +21,22 @@ pub struct Meta {
 }
 
 // ========================
-// 🚀 Services
+// Services
 // ========================
-
 #[derive(Debug, Deserialize)]
-pub struct Services {
-    pub redis_cluster: Option<Service>,
-    pub kafka: Option<Service>,
-    // Add more predefined services here
+pub enum ServiceType {
+    #[serde(rename = "redis_cluster")]
+    RedisCluster,
+    #[serde(rename = "kafka")]
+    Kafka,
+    #[serde(rename = "ccs")]
+    Ccs,
+    Custom(String),
 }
 
 #[derive(Debug, Deserialize)]
 pub struct Service {
+    pub service_type: ServiceType,
     pub image: String,
     pub tag: Option<String>,
     pub container_name: Option<String>,
@@ -42,7 +46,7 @@ pub struct Service {
 }
 
 // ========================
-// 📡 Mock CCS
+// Mock CCS
 // ========================
 
 #[derive(Debug, Deserialize)]
@@ -72,7 +76,7 @@ pub struct HttpResponse {
 }
 
 // ========================
-// ⏳ Kafka Events
+// Kafka Events
 // ========================
 
 #[derive(Debug, Deserialize)]
@@ -94,7 +98,7 @@ pub struct KafkaMessage {
 }
 
 // ========================
-// ⚠️ Failures
+// Failures
 // ========================
 
 #[derive(Debug, Deserialize)]
@@ -121,7 +125,7 @@ pub enum Failure {
 }
 
 // ========================
-// ✅ Assertions
+// Assertions
 // ========================
 
 #[derive(Debug, Deserialize)]
@@ -148,7 +152,7 @@ pub struct KafkaTopicState {
 }
 
 // ========================
-// 🔁 Hooks
+// Hooks
 // ========================
 
 #[derive(Debug, Deserialize)]
