@@ -27,7 +27,8 @@ mod test {
             timeout_seconds = 60
             labels = ["ci", "redis", "kafka", "ccs", "resilience"]
 
-            [services.redis_cluster]
+            [[services]]
+            service_type = "redis_cluster"
             image = "grokzen/redis-cluster:6.0.7"
             ports = [7000, 7001, 7002, 7003, 7004, 7005]
             wait_for_log = "Ready to accept connections"
