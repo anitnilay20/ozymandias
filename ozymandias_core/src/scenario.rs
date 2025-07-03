@@ -29,8 +29,6 @@ pub enum ServiceType {
     RedisCluster,
     #[serde(rename = "kafka")]
     Kafka,
-    #[serde(rename = "ccs")]
-    Ccs,
     Custom(String),
 }
 
@@ -43,6 +41,7 @@ pub struct Service {
     pub ports: Vec<u16>,
     pub wait_for_log: Option<String>,
     pub alias: Option<String>,
+    pub env: Option<HashMap<String, String>>,
 }
 
 // ========================

@@ -41,6 +41,7 @@ mod tests {
             ports: vec![7000, 7001, 7002, 7003, 7004, 7005],
             wait_for_log: Some("Ready to accept connections".to_string()),
             alias: None,
+            env: None,
         };
 
         let container = start_service(service).await;

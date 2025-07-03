@@ -1,6 +1,6 @@
 use testcontainers::{ContainerAsync, GenericImage};
 
-use crate::containers::start_service;
+use super::service::start_service;
 use crate::error::Result;
 use crate::scenario::Service;
 
@@ -28,6 +28,7 @@ mod tests {
             ports: vec![7000, 7001, 7002, 7003, 7004, 7005],
             wait_for_log: Some("Ready to accept connections".to_string()),
             alias: None,
+            env: None,
         };
         let container = create_redis_cluster_container(service).await;
         assert!(
