@@ -11,13 +11,13 @@
 //! ```
 
 use clap::{Parser, Subcommand};
+use logging::setup_logging;
 use tracing::info;
 
 use crate::collect_toml::collect_toml_paths;
 
 mod collect_toml;
 mod errors;
-mod logging;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -63,7 +63,7 @@ pub enum Commands {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
-    logging::setup_logging(cli.verbose)?;
+    setup_logging(cli.verbose)?;
 
     match &cli.command {
         Commands::Run { scenario_path } => {

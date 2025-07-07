@@ -4,8 +4,9 @@ use std::collections::HashMap;
 #[derive(Debug, Deserialize)]
 pub struct Scenario {
     pub meta: Meta,
+    #[serde(default = "Vec::new")]
     pub services: Vec<Service>,
-    pub mocks: Option<Mocks>,
+    pub mocks: Option<MockServer>,
     pub events: Option<Events>,
     pub failures: Option<Vec<Failure>>,
     pub assertions: Option<Assertions>,
@@ -44,20 +45,12 @@ pub struct Service {
     pub env: Option<HashMap<String, String>>,
 }
 
-// ========================
-// Mock CCS
-// ========================
-
-#[derive(Debug, Deserialize)]
-pub struct Mocks {
-    pub ccs: Option<MockServer>,
-}
-
 #[derive(Debug, Deserialize)]
 pub struct MockServer {
     pub port: u16,
     pub delay_startup: Option<u64>,
     pub routes: Vec<MockRoute>,
+    // pub exposed_env_key: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -71,7 +64,11 @@ pub struct MockRoute {
 #[derive(Debug, Deserialize)]
 pub struct HttpResponse {
     pub status: u16,
-    pub body: toml::Value,
+    pub body: String,
+
+    #[serde(default = "Vec::new")]
+    pub headers: Vec<(String, String)>,
+    pub mime_type: Option<String>,
 }
 
 // ========================

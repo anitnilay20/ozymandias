@@ -5,6 +5,10 @@ edition = "2021"
 
 [dependencies]
 testcontainers = "0.24.0"
+wiremock = "0.6"
+reqwest = { version = "0.12.22", features = ["json"] }
+# logging = { path = "../logging" }
+tracing = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_with = { workspace = true }
 toml = { workspace = true }
