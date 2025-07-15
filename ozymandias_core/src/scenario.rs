@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Display};
 
 #[derive(Debug, Deserialize)]
 pub struct Scenario {
@@ -24,7 +24,7 @@ pub struct Meta {
 // ========================
 // Services
 // ========================
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 pub enum ServiceType {
     #[serde(rename = "redis_cluster")]
     RedisCluster,
@@ -33,7 +33,24 @@ pub enum ServiceType {
     Custom(String),
 }
 
-#[derive(Debug, Deserialize)]
+impl Display for ServiceType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ServiceType::RedisCluster => write!(f, "redis_cluster"),
+            ServiceType::Kafka => write!(f, "kafka"),
+            ServiceType::Custom(name) => write!(f, "{}", name),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct RetryConfig {
+    pub max_retries: u32,
+    pub initial_backoff_ms: u64,
+    pub max_backoff_ms: u64,
+}
+
+#[derive(Debug, Deserialize, Clone)]
 pub struct Service {
     pub service_type: ServiceType,
     pub image: String,
@@ -42,7 +59,8 @@ pub struct Service {
     pub ports: Vec<u16>,
     pub wait_for_log: Option<String>,
     pub alias: Option<String>,
-    pub env: Option<HashMap<String, String>>,
+    pub env: Vec<(String, String)>,
+    pub retry_config: Option<RetryConfig>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -86,11 +104,13 @@ pub struct KafkaEvent {
     pub messages: Vec<KafkaMessage>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct KafkaMessage {
     pub topic: String,
     pub key: String,
     pub value: String,
+    #[serde(default = "Vec::new")]
+    pub headers: Vec<(String, String)>,
 }
 
 // ========================
