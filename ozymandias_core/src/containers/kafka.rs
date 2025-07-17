@@ -14,7 +14,7 @@ pub async fn create_kafka_service(service: Service) -> Result<ServiceManager<Kaf
         error!("Failed to start Kafka service: {}", e);
         OzymandiasError::ContainerStartError(e)
     })?;
-    
+
     let mut service = service;
     service.ports = vec![9092, 9093];
 

@@ -20,6 +20,7 @@ image = "grokzen/redis-cluster:6.0.7"
 ports = [7000, 7001, 7002, 7003, 7004, 7005]
 wait_for_log = "Ready to accept connections"
 alias = "redis"
+env = []
 
 [situations.redis_cluster]
 at = "30s"

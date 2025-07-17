@@ -33,6 +33,7 @@ mod test {
             ports = [7000, 7001, 7002, 7003, 7004, 7005]
             wait_for_log = "Ready to accept connections"
             alias = "redis"
+            env = []
         "#;
 
         let result = super::load_scenario_from_toml(toml).await;

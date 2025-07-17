@@ -19,7 +19,7 @@ pub enum OzymandiasError {
 
     #[error("Failed to send message to Kafka: {0}")]
     KafkaSendError(#[from] rdkafka::error::KafkaError),
-    
+
     #[error("Service Image is missing for service type: {0}")]
     InvalidServiceImage(ServiceType),
 }

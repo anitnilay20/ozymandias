@@ -32,10 +32,7 @@ mod tests {
             retry_config: None,
         };
         let manager = create_redis_cluster_container(service).await;
-        assert!(
-            manager.is_ok(),
-            "Failed to create Redis cluster container",
-        );
+        assert!(manager.is_ok(), "Failed to create Redis cluster container",);
         let container = manager.unwrap().container;
         // Since ContainerAsync does not have is_running, we just check that the container exists.
         assert!(

@@ -114,7 +114,7 @@ impl<T: testcontainers::Image> ServiceManager<T> {
     /// Get a connection string for the service (e.g., "localhost:1234")
     pub fn get_connection_string(&self, container_port: u16) -> Option<String> {
         self.get_port(container_port)
-            .map(|port| format!("localhost:{}", port))
+            .map(|port| format!("localhost:{port}"))
     }
 
     /// Stop the container
