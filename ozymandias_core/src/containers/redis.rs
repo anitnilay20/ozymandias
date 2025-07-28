@@ -1,13 +1,13 @@
-use testcontainers::{ContainerAsync, GenericImage};
+use testcontainers::GenericImage;
 
-use super::service::start_service;
+use super::service::ServiceManager;
 use crate::error::Result;
 use crate::scenario::Service;
 
 pub async fn create_redis_cluster_container(
     service: Service,
-) -> Result<ContainerAsync<GenericImage>> {
-    start_service(service).await
+) -> Result<ServiceManager<GenericImage>> {
+    ServiceManager::<GenericImage>::new(service).await
 }
 
 #[cfg(test)]
@@ -28,15 +28,12 @@ mod tests {
             ports: vec![7000, 7001, 7002, 7003, 7004, 7005],
             wait_for_log: Some("Ready to accept connections".to_string()),
             alias: None,
-            env: None,
+            env: Vec::new(),
+            retry_config: None,
         };
-        let container = create_redis_cluster_container(service).await;
-        assert!(
-            container.is_ok(),
-            "Failed to create Redis cluster container: {:?}",
-            container
-        );
-        let container = container.unwrap();
+        let manager = create_redis_cluster_container(service).await;
+        assert!(manager.is_ok(), "Failed to create Redis cluster container",);
+        let container = manager.unwrap().container;
         // Since ContainerAsync does not have is_running, we just check that the container exists.
         assert!(
             !container.id().is_empty(),
