@@ -29,7 +29,7 @@ pub async fn start_mock_server(mock_server: MockServer) -> WireMockServer {
     server
 }
 
-async fn generate_routes(routes: &Vec<MockRoute>, server: &WireMockServer) {
+pub async fn generate_routes(routes: &Vec<MockRoute>, server: &WireMockServer) {
     info!(target: "Generating mock routes", routes = ?routes);
     for route in routes {
         info!(target: "Generating mock route for", route = ?route);

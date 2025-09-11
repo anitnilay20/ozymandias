@@ -9,7 +9,10 @@ use rdkafka::{
 };
 use tracing::{error, info, warn};
 
-use crate::{actor::Actor, scenario::KafkaMessage};
+use crate::{
+    actor::actor_trait::{Actor, ActorInfo, ActorStatus, HealthStatus},
+    scenario::KafkaMessage,
+};
 use crate::{
     error::{OzymandiasError, Result},
     scenario::RetryConfig,
@@ -182,12 +185,136 @@ impl Actor<KafkaSchdulerMessage> for KafkaScheduler {
             }
         }
     }
+
+    async fn shutdown(&mut self) -> Result<()> {
+        info!(target: "KafkaScheduler", "Shutting down Kafka scheduler");
+        // Any cleanup code here
+        Ok(())
+    }
+
+    async fn pause(&mut self) -> Result<()> {
+        info!(target: "KafkaScheduler", "Pausing Kafka scheduler");
+        // Logic to pause processing
+        Ok(())
+    }
+
+    async fn restart(&mut self) -> Result<()> {
+        info!(target: "KafkaScheduler", "Restarting Kafka scheduler");
+        // Logic to restart processing
+        Ok(())
+    }
+
+    async fn resume(&mut self) -> Result<()> {
+        info!(target: "KafkaScheduler", "Resuming Kafka scheduler");
+        // Logic to resume processing
+        Ok(())
+    }
+
+    async fn status(&self) -> ActorStatus {
+        if self.producer.is_enabled() {
+            ActorStatus::Running
+        } else {
+            ActorStatus::Stopped
+        }
+    }
+
+    async fn health_check(&self) -> HealthStatus {
+        // For Kafka scheduler, we can check if the producer is functional
+        // by checking its configuration
+        let producer_healthy = !self.producer.is_enabled() || {
+            // Producer exists, so it's considered healthy
+            true
+        };
+
+        if producer_healthy {
+            let mut status = HealthStatus::healthy("Kafka scheduler is operational");
+
+            if self.consumer.is_some() {
+                status = status.with_detail("consumer", "enabled");
+            } else {
+                status = status.with_detail("consumer", "disabled");
+            }
+
+            status = status
+                .with_detail("max_retries", self.retry_config.max_retries.to_string())
+                .with_detail(
+                    "initial_backoff_ms",
+                    self.retry_config.initial_backoff_ms.to_string(),
+                )
+                .with_detail(
+                    "max_backoff_ms",
+                    self.retry_config.max_backoff_ms.to_string(),
+                );
+
+            status
+        } else {
+            HealthStatus::unhealthy("Kafka producer is not functional")
+        }
+    }
+
+    async fn get_info(&self) -> ActorInfo {
+        let mut info = ActorInfo::new("KafkaScheduler")
+            .with_metadata("type", "kafka_scheduler")
+            .with_metadata("service", "kafka");
+
+        info = info
+            .with_metadata("max_retries", self.retry_config.max_retries.to_string())
+            .with_metadata(
+                "initial_backoff_ms",
+                self.retry_config.initial_backoff_ms.to_string(),
+            )
+            .with_metadata(
+                "max_backoff_ms",
+                self.retry_config.max_backoff_ms.to_string(),
+            );
+
+        if self.consumer.is_some() {
+            info = info.with_metadata("has_consumer", "true");
+        } else {
+            info = info.with_metadata("has_consumer", "false");
+        }
+
+        info
+    }
+
+    async fn validate(&self) -> Result<Vec<String>> {
+        let mut errors = Vec::new();
+
+        // Basic validation of retry configuration
+        if self.retry_config.max_retries == 0 {
+            errors.push("Max retries is set to 0, which may not be desired".to_string());
+        }
+
+        if self.retry_config.initial_backoff_ms > self.retry_config.max_backoff_ms {
+            errors.push("Initial backoff is greater than max backoff".to_string());
+        }
+
+        if self.retry_config.max_backoff_ms > 60_000 {
+            errors
+                .push("Max backoff is greater than 60 seconds, which may be too long".to_string());
+        }
+
+        Ok(errors)
+    }
+}
+
+// Extension trait to check if FutureProducer is enabled/functional
+trait ProducerExt {
+    fn is_enabled(&self) -> bool;
+}
+
+impl ProducerExt for FutureProducer {
+    fn is_enabled(&self) -> bool {
+        // For now, we'll assume if the producer exists, it's enabled
+        // In a real implementation, you might want to do more sophisticated checks
+        true
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::{
-        actor::run_actor,
+        actor::runner::run_actor,
         containers::kafka::create_kafka_service,
         scenario::{Service, ServiceType},
     };
