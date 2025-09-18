@@ -323,6 +323,161 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    async fn test_kafka_scheduler_creation() {
+        let scheduler = KafkaScheduler::new("localhost:9092", None).unwrap();
+
+        assert_eq!(scheduler.retry_config.max_retries, 3);
+        assert_eq!(scheduler.retry_config.initial_backoff_ms, 100);
+        assert_eq!(scheduler.retry_config.max_backoff_ms, 2000);
+        assert!(scheduler.consumer.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_kafka_scheduler_with_custom_retry_config() {
+        let custom_retry = RetryConfig {
+            max_retries: 5,
+            initial_backoff_ms: 200,
+            max_backoff_ms: 3000,
+        };
+
+        let scheduler = KafkaScheduler::new("localhost:9092", Some(custom_retry)).unwrap();
+
+        assert_eq!(scheduler.retry_config.max_retries, 5);
+        assert_eq!(scheduler.retry_config.initial_backoff_ms, 200);
+        assert_eq!(scheduler.retry_config.max_backoff_ms, 3000);
+    }
+
+    #[tokio::test]
+    async fn test_kafka_scheduler_with_retry_config_builder() {
+        let scheduler = KafkaScheduler::new("localhost:9092", None)
+            .unwrap()
+            .with_retry_config(10, 500, 5000);
+
+        assert_eq!(scheduler.retry_config.max_retries, 10);
+        assert_eq!(scheduler.retry_config.initial_backoff_ms, 500);
+        assert_eq!(scheduler.retry_config.max_backoff_ms, 5000);
+    }
+
+    #[tokio::test]
+    async fn test_actor_trait_methods() {
+        let mut scheduler = KafkaScheduler::new("localhost:9092", None).unwrap();
+
+        // Test status
+        let status = scheduler.status().await;
+        assert_eq!(status, ActorStatus::Running);
+
+        // Test health check
+        let health = scheduler.health_check().await;
+        assert!(health.healthy);
+        assert_eq!(health.message, "Kafka scheduler is operational");
+        assert_eq!(
+            health.details.get("consumer"),
+            Some(&"disabled".to_string())
+        );
+
+        // Test get_info
+        let info = scheduler.get_info().await;
+        assert_eq!(info.name, "KafkaScheduler");
+        assert_eq!(
+            info.metadata.get("type"),
+            Some(&"kafka_scheduler".to_string())
+        );
+        assert_eq!(info.metadata.get("service"), Some(&"kafka".to_string()));
+        assert_eq!(
+            info.metadata.get("has_consumer"),
+            Some(&"false".to_string())
+        );
+
+        // Test pause
+        scheduler.pause().await.unwrap();
+
+        // Test resume
+        scheduler.resume().await.unwrap();
+
+        // Test restart
+        scheduler.restart().await.unwrap();
+
+        // Test shutdown
+        scheduler.shutdown().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_validation_errors() {
+        // Test with zero retries
+        let scheduler = KafkaScheduler::new("localhost:9092", None)
+            .unwrap()
+            .with_retry_config(0, 100, 2000);
+
+        let errors = scheduler.validate().await.unwrap();
+        assert!(errors.iter().any(|e| e.contains("Max retries is set to 0")));
+
+        // Test with initial backoff > max backoff
+        let scheduler = KafkaScheduler::new("localhost:9092", None)
+            .unwrap()
+            .with_retry_config(3, 5000, 2000);
+
+        let errors = scheduler.validate().await.unwrap();
+        assert!(errors
+            .iter()
+            .any(|e| e.contains("Initial backoff is greater than max backoff")));
+
+        // Test with very large max backoff
+        let scheduler = KafkaScheduler::new("localhost:9092", None)
+            .unwrap()
+            .with_retry_config(3, 100, 70_000);
+
+        let errors = scheduler.validate().await.unwrap();
+        assert!(errors
+            .iter()
+            .any(|e| e.contains("Max backoff is greater than 60 seconds")));
+
+        // Test valid config
+        let scheduler = KafkaScheduler::new("localhost:9092", None).unwrap();
+        let errors = scheduler.validate().await.unwrap();
+        assert!(errors.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_handle_messages() {
+        let mut scheduler = KafkaScheduler::new("localhost:9092", None).unwrap();
+
+        // Test Start message
+        scheduler.handle(KafkaSchdulerMessage::Start).await.unwrap();
+
+        // Test Stop message
+        scheduler.handle(KafkaSchdulerMessage::Stop).await.unwrap();
+
+        // SendMessage testing requires actual Kafka broker, covered in integration test
+    }
+
+    #[tokio::test]
+    async fn test_retry_config_default() {
+        let default_config = RetryConfig::default();
+
+        assert_eq!(default_config.max_retries, 3);
+        assert_eq!(default_config.initial_backoff_ms, 100);
+        assert_eq!(default_config.max_backoff_ms, 2000);
+    }
+
+    #[tokio::test]
+    async fn test_scheduler_with_consumer_creation_failure() {
+        let scheduler = KafkaScheduler::new("invalid:9092", None).unwrap();
+
+        // This should fail gracefully when trying to create consumer with invalid broker
+        let result = scheduler.with_consumer("invalid:9092", "test-group", &["test-topic"]);
+        // Kafka consumer creation may not immediately fail, just ensure no panic
+        let _ = result;
+    }
+
+    #[tokio::test]
+    async fn test_producer_ext_trait() {
+        let scheduler = KafkaScheduler::new("localhost:9092", None).unwrap();
+
+        // Test that producer is considered enabled
+        assert!(scheduler.producer.is_enabled());
+    }
+
+    #[tokio::test]
     async fn test_create_kafka_service_manager() {
         let (tx, rx) = tokio::sync::mpsc::channel::<_>(8);
         // Create a service configuration for Kafka

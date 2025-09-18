@@ -285,6 +285,255 @@ mod tests {
     };
 
     #[tokio::test]
+    async fn test_mock_server_actor_new() {
+        let actor = MockServerActor::new();
+        assert!(actor.mock_server.is_none());
+        assert!(!actor.is_paused);
+        assert!(actor.original_config.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_mock_server_actor_default() {
+        let actor = MockServerActor::default();
+        assert!(actor.mock_server.is_none());
+        assert!(!actor.is_paused);
+        assert!(actor.original_config.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_get_server_status() {
+        let mut actor = MockServerActor::new();
+
+        // Test stopped status
+        let status = actor.get_server_status();
+        assert_eq!(status, "Stopped");
+
+        // Test running status (we'll simulate having a server)
+        actor.mock_server = Some(WireMockServer::start().await);
+        let status = actor.get_server_status();
+        assert_eq!(status, "Running");
+
+        // Test paused status
+        actor.is_paused = true;
+        let status = actor.get_server_status();
+        assert_eq!(status, "Paused");
+    }
+
+    #[tokio::test]
+    async fn test_actor_status_methods() {
+        let mut actor = MockServerActor::new();
+
+        // Test initial status (stopped)
+        let status = actor.status().await;
+        assert_eq!(status, ActorStatus::Stopped);
+
+        // Test health check when stopped
+        let health = actor.health_check().await;
+        assert!(!health.healthy);
+        assert!(health.message.contains("No mock server running"));
+
+        // Test get_info when stopped
+        let info = actor.get_info().await;
+        assert_eq!(info.name, "MockServerActor");
+        assert_eq!(
+            info.metadata.get("type"),
+            Some(&"mock_server_actor".to_string())
+        );
+        assert_eq!(info.metadata.get("service"), Some(&"wiremock".to_string()));
+        assert!(info.metadata.get("uri").is_none());
+    }
+
+    #[tokio::test]
+    async fn test_handle_stop_when_no_server() {
+        let mut actor = MockServerActor::new();
+
+        // Should not fail when stopping with no server
+        let result = actor.handle(MockServerMessage::Stop).await;
+        assert!(result.is_ok());
+        assert!(!actor.is_paused); // Should reset pause state
+        assert!(actor.original_config.is_none()); // Should clear config
+    }
+
+    #[tokio::test]
+    async fn test_handle_get_uri_no_server() {
+        let mut actor = MockServerActor::new();
+
+        // Should not fail when getting URI with no server
+        let result = actor.handle(MockServerMessage::GetUri).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_handle_status_no_server() {
+        let mut actor = MockServerActor::new();
+
+        // Should not fail when getting status with no server
+        let result = actor.handle(MockServerMessage::Status).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_handle_reset_no_server() {
+        let mut actor = MockServerActor::new();
+
+        // Should not fail when resetting with no server
+        let result = actor.handle(MockServerMessage::Reset).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_shutdown() {
+        let mut actor = MockServerActor::new();
+
+        // Should not fail when shutting down with no server
+        let result = actor.shutdown().await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_restart() {
+        let mut actor = MockServerActor::new();
+
+        // Should not fail when restarting with no server
+        let result = actor.restart().await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_pause_resume_no_server() {
+        let mut actor = MockServerActor::new();
+
+        // Test pause with no server
+        actor.pause().await.unwrap();
+        assert!(actor.is_paused);
+
+        // Test resume with no server (no config to restore)
+        actor.resume().await.unwrap();
+        assert!(!actor.is_paused);
+    }
+
+    #[tokio::test]
+    async fn test_validation_no_server() {
+        let actor = MockServerActor::new();
+
+        let errors = actor.validate().await.unwrap();
+        // Should have no errors when no server is running
+        assert!(errors.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_validation_paused_without_config() {
+        let mut actor = MockServerActor::new();
+        actor.is_paused = true;
+        actor.original_config = None;
+
+        let errors = actor.validate().await.unwrap();
+        assert!(errors
+            .iter()
+            .any(|e| e.contains("paused but no original configuration")));
+    }
+
+    #[tokio::test]
+    async fn test_allowed_messages_when_paused() {
+        let mut actor = MockServerActor::new();
+
+        // Pause the actor
+        actor.pause().await.unwrap();
+        assert!(actor.is_paused);
+
+        // These messages should be allowed when paused
+        assert!(actor.handle(MockServerMessage::Stop).await.is_ok());
+
+        actor.pause().await.unwrap(); // Re-pause after stop resets pause state
+        assert!(actor.handle(MockServerMessage::Resume).await.is_ok());
+
+        actor.pause().await.unwrap(); // Re-pause
+        assert!(actor.handle(MockServerMessage::Status).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_message_debug_formatting() {
+        // Test that messages can be formatted for debug
+        let msg1 = MockServerMessage::Start(Box::new(MockServer {
+            port: 3000,
+            delay_startup: None,
+            routes: vec![],
+        }));
+
+        let debug_str = format!("{:?}", msg1);
+        assert!(debug_str.contains("Start"));
+
+        let msg2 = MockServerMessage::Stop;
+        let debug_str = format!("{:?}", msg2);
+        assert!(debug_str.contains("Stop"));
+
+        let msg3 = MockServerMessage::GetUri;
+        let debug_str = format!("{:?}", msg3);
+        assert!(debug_str.contains("GetUri"));
+
+        let msg4 = MockServerMessage::Reset;
+        let debug_str = format!("{:?}", msg4);
+        assert!(debug_str.contains("Reset"));
+    }
+
+    #[tokio::test]
+    async fn test_reset_method_directly() {
+        let mut actor = MockServerActor::new();
+
+        // Test reset with no server
+        let result = actor.reset().await;
+        assert!(result.is_ok());
+
+        // Test reset with server
+        let mock_server = WireMockServer::start().await;
+        actor.mock_server = Some(mock_server);
+
+        let result = actor.reset().await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_get_info_with_config() {
+        let mut actor = MockServerActor::new();
+
+        let config = MockServer {
+            port: 8080,
+            delay_startup: Some(100),
+            routes: vec![
+                MockRoute {
+                    method: "GET".to_string(),
+                    path: "/test1".to_string(),
+                    delay_ms: None,
+                    response: HttpResponse {
+                        status: 200,
+                        body: "test".to_string(),
+                        headers: vec![],
+                        mime_type: None,
+                    },
+                },
+                MockRoute {
+                    method: "POST".to_string(),
+                    path: "/test2".to_string(),
+                    delay_ms: None,
+                    response: HttpResponse {
+                        status: 201,
+                        body: "created".to_string(),
+                        headers: vec![],
+                        mime_type: None,
+                    },
+                },
+            ],
+        };
+
+        actor.original_config = Some(config);
+
+        let info = actor.get_info().await;
+        assert_eq!(info.metadata.get("port"), Some(&"8080".to_string()));
+        assert_eq!(info.metadata.get("delay_startup"), Some(&"100".to_string()));
+        assert_eq!(info.metadata.get("routes_count"), Some(&"2".to_string()));
+    }
+
+    #[tokio::test]
     async fn test_mock_server_actor() {
         let (tx, rx) = mpsc::channel::<MockServerMessage>(10);
         let actor = MockServerActor::new();

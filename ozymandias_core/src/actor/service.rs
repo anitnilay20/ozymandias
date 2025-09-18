@@ -205,6 +205,192 @@ mod tests {
     use crate::{actor::runner::run_actor, scenario::ServiceType};
 
     #[tokio::test]
+    async fn test_service_container_actor_new() {
+        let actor = ServiceContainerActor::new();
+        assert!(actor.service_manager.is_none());
+        assert!(!actor.is_paused);
+    }
+
+    #[tokio::test]
+    async fn test_service_container_actor_default() {
+        let actor = ServiceContainerActor::default();
+        assert!(actor.service_manager.is_none());
+        assert!(!actor.is_paused);
+    }
+
+    #[tokio::test]
+    async fn test_actor_status_methods() {
+        let mut actor = ServiceContainerActor::new();
+
+        // Test initial status (stopped)
+        let status = actor.status().await;
+        assert_eq!(status, ActorStatus::Stopped);
+
+        // Test health check when stopped
+        let health = actor.health_check().await;
+        assert!(!health.healthy);
+        assert!(health.message.contains("No service container running"));
+
+        // Test get_info when stopped
+        let info = actor.get_info().await;
+        assert_eq!(info.name, "ServiceContainerActor");
+        assert_eq!(
+            info.metadata.get("type"),
+            Some(&"generic_container_actor".to_string())
+        );
+        assert!(info.metadata.get("container_id").is_none());
+    }
+
+    #[tokio::test]
+    async fn test_handle_stop_when_no_container() {
+        let mut actor = ServiceContainerActor::new();
+
+        // Should not fail when stopping with no container
+        let result = actor.handle(ServiceContainerMessage::Stop).await;
+        assert!(result.is_ok());
+        assert!(!actor.is_paused); // Should reset pause state
+    }
+
+    #[tokio::test]
+    async fn test_handle_get_connection_string_no_container() {
+        let mut actor = ServiceContainerActor::new();
+
+        // Should not fail when getting connection string with no container
+        let result = actor
+            .handle(ServiceContainerMessage::GetConnectionString { port: 8080 })
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_handle_wait_ready_no_container() {
+        let mut actor = ServiceContainerActor::new();
+
+        // Should not fail when waiting with no container
+        let result = actor
+            .handle(ServiceContainerMessage::WaitReady { duration_secs: 1 })
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_shutdown() {
+        let mut actor = ServiceContainerActor::new();
+
+        // Should not fail when shutting down with no container
+        let result = actor.shutdown().await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_restart() {
+        let mut actor = ServiceContainerActor::new();
+
+        // Should not fail when restarting with no container
+        let result = actor.restart().await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_pause_resume_directly() {
+        let mut actor = ServiceContainerActor::new();
+
+        // Test pause
+        actor.pause().await.unwrap();
+        assert!(actor.is_paused);
+        assert_eq!(actor.status().await, ActorStatus::Stopped); // Still stopped since no service
+
+        // Test resume
+        actor.resume().await.unwrap();
+        assert!(!actor.is_paused);
+    }
+
+    #[tokio::test]
+    async fn test_validation_no_container() {
+        let actor = ServiceContainerActor::new();
+
+        let errors = actor.validate().await.unwrap();
+        // Should have no errors when no container is running
+        assert!(errors.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_allowed_messages_when_paused() {
+        let mut actor = ServiceContainerActor::new();
+
+        // Pause the actor
+        actor.pause().await.unwrap();
+        assert!(actor.is_paused);
+
+        // Stop message should be allowed when paused
+        assert!(actor.handle(ServiceContainerMessage::Stop).await.is_ok());
+
+        actor.pause().await.unwrap(); // Re-pause after stop resets pause state
+
+        // Other messages should be ignored when paused
+        let service = Service {
+            service_type: ServiceType::Custom("test".to_string()),
+            image: "test".into(),
+            tag: None,
+            container_name: None,
+            ports: vec![],
+            wait_for_log: None,
+            alias: None,
+            env: vec![],
+            retry_config: None,
+        };
+
+        // These should be ignored due to pause
+        assert!(actor
+            .handle(ServiceContainerMessage::Start(Box::new(service)))
+            .await
+            .is_ok());
+        assert!(actor.service_manager.is_none()); // Should not have started
+
+        assert!(actor
+            .handle(ServiceContainerMessage::GetConnectionString { port: 8080 })
+            .await
+            .is_ok());
+        assert!(actor
+            .handle(ServiceContainerMessage::WaitReady { duration_secs: 1 })
+            .await
+            .is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_message_debug_formatting() {
+        // Test that messages can be formatted for debug
+        let msg1 = ServiceContainerMessage::Start(Box::new(Service {
+            service_type: ServiceType::Custom("test".to_string()),
+            image: "test".into(),
+            tag: None,
+            container_name: None,
+            ports: vec![],
+            wait_for_log: None,
+            alias: None,
+            env: vec![],
+            retry_config: None,
+        }));
+
+        let debug_str = format!("{:?}", msg1);
+        assert!(debug_str.contains("Start"));
+
+        let msg2 = ServiceContainerMessage::Stop;
+        let debug_str = format!("{:?}", msg2);
+        assert!(debug_str.contains("Stop"));
+
+        let msg3 = ServiceContainerMessage::GetConnectionString { port: 8080 };
+        let debug_str = format!("{:?}", msg3);
+        assert!(debug_str.contains("GetConnectionString"));
+        assert!(debug_str.contains("8080"));
+
+        let msg4 = ServiceContainerMessage::WaitReady { duration_secs: 5 };
+        let debug_str = format!("{:?}", msg4);
+        assert!(debug_str.contains("WaitReady"));
+        assert!(debug_str.contains("5"));
+    }
+
+    #[tokio::test]
     async fn test_service_container_actor() {
         let (tx, rx) = mpsc::channel::<ServiceContainerMessage>(10);
         let actor = ServiceContainerActor::new();

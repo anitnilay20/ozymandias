@@ -328,4 +328,91 @@ mod tests {
         actor.restart().await.unwrap();
         assert_eq!(actor.status().await, ActorStatus::Running);
     }
+
+    #[tokio::test]
+    async fn test_actor_status_display() {
+        assert_eq!(format!("{}", ActorStatus::Stopped), "Stopped");
+        assert_eq!(format!("{}", ActorStatus::Starting), "Starting");
+        assert_eq!(format!("{}", ActorStatus::Running), "Running");
+        assert_eq!(format!("{}", ActorStatus::Paused), "Paused");
+        assert_eq!(format!("{}", ActorStatus::Stopping), "Stopping");
+        assert_eq!(
+            format!("{}", ActorStatus::Error("test error".to_string())),
+            "Error: test error"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_health_status_builders() {
+        let healthy = HealthStatus::healthy("All good");
+        assert!(healthy.healthy);
+        assert_eq!(healthy.message, "All good");
+        assert!(healthy.details.is_empty());
+
+        let unhealthy = HealthStatus::unhealthy("Something wrong");
+        assert!(!unhealthy.healthy);
+        assert_eq!(unhealthy.message, "Something wrong");
+        assert!(unhealthy.details.is_empty());
+
+        let with_details = HealthStatus::healthy("Good")
+            .with_detail("key1", "value1")
+            .with_detail("key2", "value2");
+        assert_eq!(
+            with_details.details.get("key1"),
+            Some(&"value1".to_string())
+        );
+        assert_eq!(
+            with_details.details.get("key2"),
+            Some(&"value2".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn test_actor_info_builder() {
+        let info = ActorInfo::new("TestActor");
+        assert_eq!(info.name, "TestActor");
+        assert_eq!(info.version, "1.0.0");
+        assert!(info.uptime_seconds.is_none());
+        assert!(info.messages_processed.is_none());
+        assert!(info.metadata.is_empty());
+
+        let info_with_metadata = ActorInfo::new("TestActor")
+            .with_metadata("type", "test")
+            .with_metadata("status", "active");
+        assert_eq!(
+            info_with_metadata.metadata.get("type"),
+            Some(&"test".to_string())
+        );
+        assert_eq!(
+            info_with_metadata.metadata.get("status"),
+            Some(&"active".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn test_actor_status_equality() {
+        assert_eq!(ActorStatus::Running, ActorStatus::Running);
+        assert_eq!(ActorStatus::Stopped, ActorStatus::Stopped);
+        assert_eq!(
+            ActorStatus::Error("test".to_string()),
+            ActorStatus::Error("test".to_string())
+        );
+
+        assert_ne!(ActorStatus::Running, ActorStatus::Stopped);
+        assert_ne!(
+            ActorStatus::Error("test1".to_string()),
+            ActorStatus::Error("test2".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn test_message_trait_implementation() {
+        // Test that our TestMessage implements Message trait
+        let _msg: Box<dyn Message> = Box::new(TestMessage::Process);
+
+        // Test debug formatting
+        let msg = TestMessage::Process;
+        let debug_str = format!("{:?}", msg);
+        assert!(debug_str.contains("Process"));
+    }
 }

@@ -26,23 +26,31 @@ A robust, production-ready actor system for managing containerized services and 
 
 ## Usage Example
 
-```rust
+```rust,no_run
 use ozymandias_core::actor::{Actor, ActorRunner, run_actor};
+use ozymandias_core::actor::kafka::KafkaContainerActor;
 
+# #[tokio::main]
+# async fn main() -> ozymandias_core::error::Result<()> {
 // Simple usage
 let (tx, rx) = tokio::sync::mpsc::channel(10);
 let actor = KafkaContainerActor::new();
 tokio::spawn(run_actor(actor, rx));
 
 // Enhanced usage with lifecycle management
-let runner = ActorRunner::new(actor, rx);
+let (tx2, rx2) = tokio::sync::mpsc::channel(10);
+let actor2 = KafkaContainerActor::new();
+let runner = ActorRunner::new(actor2, rx2);
 tokio::spawn(runner.run());
 
 // Actor introspection
-let status = actor.status().await;
-let health = actor.health_check().await;
-let info = actor.get_info().await;
-let warnings = actor.validate().await?;
+let actor3 = KafkaContainerActor::new();
+let status = actor3.status().await;
+let health = actor3.health_check().await;
+let info = actor3.get_info().await;
+let warnings = actor3.validate().await?;
+# Ok(())
+# }
 ```
 */
 

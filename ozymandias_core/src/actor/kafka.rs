@@ -291,6 +291,168 @@ mod tests {
     use crate::{actor::runner::run_actor, scenario::ServiceType};
 
     #[tokio::test]
+    async fn test_kafka_container_actor_new() {
+        let actor = KafkaContainerActor::new();
+        assert!(actor.service_manager.is_none());
+        assert!(!actor.is_paused);
+    }
+
+    #[tokio::test]
+    async fn test_kafka_container_actor_default() {
+        let actor = KafkaContainerActor::default();
+        assert!(actor.service_manager.is_none());
+        assert!(!actor.is_paused);
+    }
+
+    #[tokio::test]
+    async fn test_actor_status_methods() {
+        let mut actor = KafkaContainerActor::new();
+
+        // Test initial status (stopped)
+        let status = actor.status().await;
+        assert_eq!(status, ActorStatus::Stopped);
+
+        // Test health check when stopped
+        let health = actor.health_check().await;
+        assert!(!health.healthy);
+        assert!(health.message.contains("No Kafka container running"));
+
+        // Test get_info when stopped
+        let info = actor.get_info().await;
+        assert_eq!(info.name, "KafkaContainerActor");
+        assert_eq!(
+            info.metadata.get("type"),
+            Some(&"container_actor".to_string())
+        );
+        assert_eq!(info.metadata.get("service"), Some(&"kafka".to_string()));
+        assert!(info.metadata.get("container_id").is_none());
+    }
+
+    #[tokio::test]
+    async fn test_get_container_id_when_no_service() {
+        let actor = KafkaContainerActor::new();
+        let container_id = actor.get_container_id().await;
+        assert!(container_id.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_handle_stop_when_no_container() {
+        let mut actor = KafkaContainerActor::new();
+
+        // Should not fail when stopping with no container
+        let result = actor.handle(KafkaContainerMessage::Stop).await;
+        assert!(result.is_ok());
+        assert!(!actor.is_paused); // Should reset pause state
+    }
+
+    #[tokio::test]
+    async fn test_handle_get_connection_string_no_container() {
+        let mut actor = KafkaContainerActor::new();
+
+        // Should not fail when getting connection string with no container
+        let result = actor
+            .handle(KafkaContainerMessage::GetConnectionString { port: 9092 })
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_handle_status_no_container() {
+        let mut actor = KafkaContainerActor::new();
+
+        // Should not fail when getting status with no container
+        let result = actor.handle(KafkaContainerMessage::Status).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_shutdown() {
+        let mut actor = KafkaContainerActor::new();
+
+        // Should not fail when shutting down with no container
+        let result = actor.shutdown().await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_restart() {
+        let mut actor = KafkaContainerActor::new();
+
+        // Should not fail when restarting with no container
+        let result = actor.restart().await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_pause_resume_no_container() {
+        let mut actor = KafkaContainerActor::new();
+
+        // Test pause with no container
+        actor.pause().await.unwrap();
+        assert!(actor.is_paused);
+
+        // Test resume with no container
+        actor.resume().await.unwrap();
+        assert!(!actor.is_paused);
+    }
+
+    #[tokio::test]
+    async fn test_validation_docker_accessibility() {
+        let actor = KafkaContainerActor::new();
+
+        // This may pass or fail depending on Docker availability
+        let errors = actor.validate().await.unwrap();
+        // Don't assert specific behavior since Docker may or may not be available in test env
+        println!("Validation errors: {:?}", errors);
+    }
+
+    #[tokio::test]
+    async fn test_allowed_messages_when_paused() {
+        let mut actor = KafkaContainerActor::new();
+
+        // Pause the actor
+        actor.pause().await.unwrap();
+        assert!(actor.is_paused);
+
+        // These messages should be allowed when paused
+        assert!(actor.handle(KafkaContainerMessage::Stop).await.is_ok());
+
+        actor.pause().await.unwrap(); // Re-pause after stop resets pause state
+        assert!(actor.handle(KafkaContainerMessage::Resume).await.is_ok());
+
+        actor.pause().await.unwrap(); // Re-pause
+        assert!(actor.handle(KafkaContainerMessage::Status).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_message_debug_formatting() {
+        // Test that messages can be formatted for debug
+        let msg1 = KafkaContainerMessage::Start(Box::new(Service {
+            service_type: ServiceType::Kafka,
+            image: "test".into(),
+            tag: None,
+            container_name: None,
+            ports: vec![],
+            wait_for_log: None,
+            alias: None,
+            env: vec![],
+            retry_config: None,
+        }));
+
+        let debug_str = format!("{:?}", msg1);
+        assert!(debug_str.contains("Start"));
+
+        let msg2 = KafkaContainerMessage::Stop;
+        let debug_str = format!("{:?}", msg2);
+        assert!(debug_str.contains("Stop"));
+
+        let msg3 = KafkaContainerMessage::GetConnectionString { port: 9092 };
+        let debug_str = format!("{:?}", msg3);
+        assert!(debug_str.contains("GetConnectionString"));
+        assert!(debug_str.contains("9092"));
+    }
+
+    #[tokio::test]
     async fn test_kafka_container_actor() {
         let (tx, rx) = mpsc::channel::<KafkaContainerMessage>(10);
         let actor = KafkaContainerActor::new();
