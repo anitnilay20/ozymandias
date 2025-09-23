@@ -43,8 +43,33 @@ mod test {
 
     #[tokio::test]
     async fn test_load_toml_file() {
-        let result = super::load_scenario_from_toml_file("../scenarios/1.toml").await;
+        // Create a temporary file with valid TOML content
+        let temp_dir = std::env::temp_dir();
+        let temp_file = temp_dir.join("test_scenario.toml");
+
+        let toml_content = r#"
+[meta]
+name = "redis_cluster_ccs_kafka"
+description = "Test config-poller with all major integrations and simulate failures"
+timeout_seconds = 60
+labels = ["ci", "redis", "kafka", "ccs", "resilience"]
+
+[[services]]
+service_type = "redis_cluster"
+image = "grokzen/redis-cluster:6.0.7"
+ports = [7000, 7001, 7002, 7003, 7004, 7005]
+wait_for_log = "Ready to accept connections"
+alias = "redis"
+env = []
+        "#;
+
+        std::fs::write(&temp_file, toml_content).expect("Failed to write test file");
+
+        let result = super::load_scenario_from_toml_file(temp_file.to_str().unwrap()).await;
         println!("{:?}", result);
         assert!(result.is_ok());
+
+        // Clean up
+        let _ = std::fs::remove_file(temp_file);
     }
 }
