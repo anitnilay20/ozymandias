@@ -1,6 +1,8 @@
 [workspace]
 members = ["cli", "logging", "ozymandias_core"]
+default-members = ["cli"]
 resolver = "2"
+package.repository = "https://github.com/anitnilay20/ozymandias"
 
 [workspace.dependencies]
 serde = { version = "1.0", features = ["derive"] }

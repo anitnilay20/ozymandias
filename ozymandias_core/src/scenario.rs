@@ -63,7 +63,7 @@ pub struct Service {
     pub retry_config: Option<RetryConfig>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct MockServer {
     pub port: u16,
     pub delay_startup: Option<u64>,
@@ -71,7 +71,7 @@ pub struct MockServer {
     // pub exposed_env_key: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct MockRoute {
     pub method: String,
     pub path: String,
@@ -79,7 +79,7 @@ pub struct MockRoute {
     pub response: HttpResponse,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct HttpResponse {
     pub status: u16,
     pub body: String,

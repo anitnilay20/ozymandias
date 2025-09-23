@@ -1,40 +1,400 @@
 # ===============================
-# 🧪 Scenario: redis_cluster_ccs_kafka
-# Description: Integration test for config-poller with Redis cluster, Kafka, and mocked CCS
+# 🧪 Enhanced Scenario: redis_cluster_ccs_kafka_comprehensive
+# Description: Comprehensive integration test with Redis cluster, Kafka, mocked services, and failure simulation
 # ===============================
 
 [meta]
-name = "redis_cluster_ccs_kafka"
-description = "Test config-poller with all major integrations and simulate failures"
-timeout_seconds = 60
-labels = ["ci", "redis", "kafka", "ccs", "resilience"]
+name = "redis_cluster_ccs_kafka_comprehensive"
+description = "Comprehensive test with Redis cluster, Kafka, multiple mocked APIs, and realistic failure scenarios"
+timeout_seconds = 120
+labels = ["integration", "redis", "kafka", "ccs", "resilience", "chaos", "performance"]
 
 # ===============================
-# 🚀 Services
+# 🚀 Services Configuration
 # ===============================
 
+# Redis Cluster - Primary data store
 [[services]]
 service_type = "redis_cluster"
-type = "redis_cluster"
 image = "grokzen/redis-cluster:6.0.7"
 ports = [7000, 7001, 7002, 7003, 7004, 7005]
 wait_for_log = "Ready to accept connections"
-alias = "redis"
-env = []
+alias = "redis_primary"
+container_name = "redis_cluster_primary"
+env = [
+    "INITIAL_PORT=7000",
+    "MASTERS=3",
+    "SLAVES_PER_MASTER=1"
+]
 
-[situations.redis_cluster]
-at = "30s"
-status = "stop"
+# Kafka - Message streaming platform
+[[services]]
+service_type = "kafka"
+ports = [9092, 9093]
+wait_for_log = "started (kafka.server.KafkaServer)"
+alias = "kafka_broker"
+container_name = "kafka_message_broker"
+env = [
+    "KAFKA_AUTO_CREATE_TOPICS_ENABLE=true",
+    "KAFKA_LOG_RETENTION_HOURS=1"
+]
 
-[mock.api]
-endpoint = "http://mock-api:8080/config/:id"
-response = """
-{
-  "id": ":id",
-  "name": "mocked-config",
-  "version": 1,
-  "data": {
-    "key": "value"
-  }
+# Backup Redis instance for failover testing
+[[services]]
+service_type = "redis_cluster"
+image = "grokzen/redis-cluster:6.0.7"
+ports = [7100, 7101, 7102, 7103, 7104, 7105]
+wait_for_log = "Ready to accept connections"
+alias = "redis_backup"
+container_name = "redis_cluster_backup"
+env = [
+    "INITIAL_PORT=7100",
+    "MASTERS=3",
+    "SLAVES_PER_MASTER=1"
+]
+
+# Database simulation
+[[services]]
+service_type = "custom"
+image = "postgres:13"
+ports = [5432]
+wait_for_log = "database system is ready to accept connections"
+alias = "postgres_db"
+container_name = "test_postgres"
+env = [
+    "POSTGRES_DB=testdb",
+    "POSTGRES_USER=testuser",
+    "POSTGRES_PASSWORD=testpass"
+]
+
+# ===============================
+# 🎭 Mock Services Configuration
+# ===============================
+
+# Configuration Service Mock
+[[mock_servers]]
+port = 8080
+routes = [
+    # Happy path - valid config
+    {
+        method = "GET",
+        path = "/config/app-config",
+        response = {
+            status = 200,
+            body = '''
+            {
+                "id": "app-config",
+                "name": "Application Configuration",
+                "version": 2,
+                "environment": "test",
+                "data": {
+                    "redis_url": "redis://redis_primary:7000",
+                    "kafka_brokers": ["kafka_broker:9092"],
+                    "feature_flags": {
+                        "enable_caching": true,
+                        "enable_retry": true,
+                        "max_retries": 3
+                    },
+                    "timeouts": {
+                        "connect_timeout_ms": 5000,
+                        "read_timeout_ms": 30000
+                    }
+                },
+                "last_modified": "2024-01-15T10:30:00Z"
+            }''',
+            headers = [["Content-Type", "application/json"], ["X-Config-Version", "2"]]
+        },
+        delay_ms = 100
+    },
+    # Slow response scenario
+    {
+        method = "GET",
+        path = "/config/slow-config",
+        response = {
+            status = 200,
+            body = '{"id": "slow-config", "data": {"message": "This was slow"}}',
+            headers = [["Content-Type", "application/json"]]
+        },
+        delay_ms = 5000
+    },
+    # Error scenarios
+    {
+        method = "GET",
+        path = "/config/error-config",
+        response = {
+            status = 500,
+            body = '{"error": "Internal server error", "code": "CONFIG_ERROR"}',
+            headers = [["Content-Type", "application/json"]]
+        }
+    },
+    # Rate limited scenario
+    {
+        method = "GET",
+        path = "/config/rate-limited",
+        response = {
+            status = 429,
+            body = '{"error": "Rate limited", "retry_after": 60}',
+            headers = [["Content-Type", "application/json"], ["Retry-After", "60"]]
+        }
+    },
+    # Authentication required
+    {
+        method = "GET",
+        path = "/config/secure-config",
+        response = {
+            status = 401,
+            body = '{"error": "Unauthorized", "message": "Bearer token required"}',
+            headers = [["Content-Type", "application/json"], ["WWW-Authenticate", "Bearer"]]
+        }
+    },
+    # Dynamic configuration updates
+    {
+        method = "POST",
+        path = "/config/app-config/update",
+        response = {
+            status = 202,
+            body = '{"message": "Configuration update accepted", "version": 3}',
+            headers = [["Content-Type", "application/json"]]
+        },
+        delay_ms = 500
+    }
+]
+
+# User Service Mock - External dependency
+[[mock_servers]]
+port = 8081
+routes = [
+    {
+        method = "GET",
+        path = "/users/:id",
+        response = {
+            status = 200,
+            body = '''
+            {
+                "id": ":id",
+                "username": "user_:id",
+                "email": "user:id@example.com",
+                "roles": ["user"],
+                "preferences": {
+                    "theme": "dark",
+                    "notifications": true
+                },
+                "created_at": "2024-01-01T00:00:00Z"
+            }''',
+            headers = [["Content-Type", "application/json"]]
+        }
+    },
+    {
+        method = "GET",
+        path = "/users",
+        response = {
+            status = 200,
+            body = '''
+            {
+                "users": [
+                    {"id": "1", "username": "alice", "email": "alice@example.com"},
+                    {"id": "2", "username": "bob", "email": "bob@example.com"}
+                ],
+                "total": 2,
+                "page": 1,
+                "per_page": 10
+            }''',
+            headers = [["Content-Type", "application/json"]]
+        }
+    }
+]
+
+# Notification Service Mock
+[[mock_servers]]
+port = 8082
+delay_startup = 2000
+routes = [
+    {
+        method = "POST",
+        path = "/notifications/send",
+        response = {
+            status = 201,
+            body = '{"id": "notif-12345", "status": "sent", "delivered_at": "2024-01-15T10:35:00Z"}',
+            headers = [["Content-Type", "application/json"]]
+        },
+        delay_ms = 200
+    },
+    {
+        method = "GET",
+        path = "/notifications/health",
+        response = {
+            status = 200,
+            body = '{"status": "healthy", "queue_size": 42, "last_check": "2024-01-15T10:34:50Z"}',
+            headers = [["Content-Type", "application/json"]]
+        }
+    }
+]
+
+# ===============================
+# 🎲 Chaos Engineering - Failure Scenarios
+# ===============================
+
+# Phase 1: Normal operations (0-20s)
+[situations.initial_health_check]
+at = "5s"
+action = "health_check"
+target = "all"
+
+# Phase 2: Start introducing stress (20-40s)
+[situations.redis_primary_pause]
+at = "20s"
+action = "pause"
+target = "redis_primary"
+description = "Simulate Redis cluster pause to test failover"
+
+[situations.test_backup_redis]
+at = "22s"
+action = "health_check"
+target = "redis_backup"
+description = "Verify backup Redis is ready for failover"
+
+[situations.kafka_stress_test]
+at = "25s"
+action = "custom"
+target = "kafka_broker"
+command = "kafka-producer-perf-test"
+args = ["--topic", "test-topic", "--num-records", "1000", "--record-size", "1024", "--throughput", "100"]
+description = "Generate Kafka load to test performance under stress"
+
+# Phase 3: Network issues and recovery (40-70s)
+[situations.mock_api_failure]
+at = "40s"
+action = "pause"
+target = "mock_servers"
+description = "Simulate external API failures"
+
+[situations.redis_recovery]
+at = "45s"
+action = "resume"
+target = "redis_primary"
+description = "Resume Redis to test recovery mechanisms"
+
+[situations.partial_mock_recovery]
+at = "50s"
+action = "resume"
+target = "mock_servers"
+description = "Resume mocks to test partial recovery scenarios"
+
+# Phase 4: Database issues (70-90s)
+[situations.database_failure]
+at = "70s"
+action = "stop"
+target = "postgres_db"
+description = "Simulate database outage"
+
+[situations.high_latency_simulation]
+at = "75s"
+action = "network_delay"
+target = "all"
+delay_ms = 2000
+description = "Simulate high network latency"
+
+# Phase 5: Full recovery and final checks (90-120s)
+[situations.database_restart]
+at = "90s"
+action = "start"
+target = "postgres_db"
+description = "Restart database for recovery testing"
+
+[situations.network_recovery]
+at = "95s"
+action = "network_restore"
+target = "all"
+description = "Restore normal network conditions"
+
+[situations.final_health_check]
+at = "110s"
+action = "health_check"
+target = "all"
+description = "Final system health verification"
+
+[situations.performance_test]
+at = "115s"
+action = "load_test"
+target = "all"
+duration_seconds = 5
+requests_per_second = 50
+description = "Final performance verification under normal conditions"
+
+# ===============================
+# 🧪 Kafka Message Scenarios
+# ===============================
+
+# Simulate realistic Kafka message patterns
+[[kafka_messages]]
+topic = "config-updates"
+at = "10s"
+message = {
+    key = "app-config",
+    value = '{"event": "config_updated", "config_id": "app-config", "version": 2, "timestamp": "2024-01-15T10:30:00Z"}',
+    headers = [["source", "config-service"], ["event-type", "update"]]
 }
-"""
+
+[[kafka_messages]]
+topic = "user-events"
+at = "15s"
+message = {
+    key = "user-123",
+    value = '{"event": "user_login", "user_id": "123", "ip": "192.168.1.100", "timestamp": "2024-01-15T10:30:15Z"}',
+    headers = [["source", "auth-service"]]
+}
+
+[[kafka_messages]]
+topic = "system-alerts"
+at = "35s"
+message = {
+    key = "alert-456",
+    value = '{"level": "warning", "message": "High CPU usage detected", "service": "config-poller", "timestamp": "2024-01-15T10:30:35Z"}',
+    headers = [["priority", "high"], ["source", "monitoring"]]
+}
+
+[[kafka_messages]]
+topic = "config-updates"
+at = "55s"
+message = {
+    key = "app-config",
+    value = '{"event": "config_rollback", "config_id": "app-config", "version": 1, "reason": "validation_failed", "timestamp": "2024-01-15T10:30:55Z"}',
+    headers = [["source", "config-service"], ["event-type", "rollback"]]
+}
+
+# ===============================
+# 📊 Validation & Assertions
+# ===============================
+
+[validations]
+# Ensure services start properly
+expect_service_healthy = ["redis_primary", "kafka_broker", "postgres_db"]
+expect_mock_servers_responsive = [8080, 8081, 8082]
+
+# Performance expectations
+max_response_time_ms = 5000
+min_success_rate_percent = 85
+
+# Data consistency checks
+expect_redis_cluster_nodes = 6
+expect_kafka_topics = ["config-updates", "user-events", "system-alerts"]
+
+# Recovery validations
+expect_recovery_time_seconds = 30
+expect_zero_data_loss = true
+
+[monitoring]
+# Collect metrics during test execution
+collect_metrics = true
+metrics_interval_seconds = 5
+export_format = "prometheus"
+
+# Log collection
+collect_logs = true
+log_level = "debug"
+include_container_logs = true
+
+# Health check configuration
+health_check_interval_seconds = 10
+health_check_timeout_seconds = 5
+health_check_retries = 3
