@@ -8,6 +8,81 @@ labels = ["ci", "redis", "kafka", "ccs", "resilience"]
 service_type = "redis_cluster"
 image = "grokzen/redis-cluster:6.0.7"
 ports = [7000, 7001, 7002, 7003, 7004, 7005]
-wait_for_log = "Ready to accept connections"  
+wait_for_log = "Ready to accept connections"
 alias = "redis"
 env = []
+
+[[services]]
+service_type = "kafka"
+image = "confluentinc/cp-kafka:latest"
+ports = [9092]
+wait_for_log = "started (kafka.server.KafkaServer)"
+alias = "kafka"
+env = [
+    "KAFKA_BROKER_ID=1",
+    "KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181",
+    "KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://localhost:9092",
+    "KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1"
+]
+
+# Issue #9: Mock Server with Malformed/Invalid Response Support
+[[mock_servers]]
+port = 8080
+delay_startup = 1
+
+# Standard successful responses for comparison
+[[mock_servers.routes]]
+method = "GET"
+path = "/api/config"
+delay_ms = 100
+response = { status = 200, body = '{"environment": "production", "version": "1.0.0"}', headers = [["Content-Type", "application/json"]], mime_type = "application/json" }
+
+# Issue #9 Examples: Malformed/Invalid Response Mock Support
+# Test invalid JSON responses for error handling
+[[mock_servers.routes]]
+method = "GET"
+path = "/api/invalid-json"
+delay_ms = 100
+response = { status = 200, body = '{"invalid": "json", "missing_quote: true, "malformed": }', headers = [["Content-Type", "application/json"]], mime_type = "application/json" }
+
+# Test unexpected status codes
+[[mock_servers.routes]]
+method = "GET"
+path = "/api/unexpected-error"
+delay_ms = 50
+response = { status = 418, body = '{"error": "I am a teapot", "code": 418}', headers = [["Content-Type", "application/json"]], mime_type = "application/json" }
+
+# Test completely malformed response body
+[[mock_servers.routes]]
+method = "POST"
+path = "/api/corrupt-data"
+delay_ms = 200
+response = { status = 500, body = 'CORRUPTED_DATA_12345!!@#$%^&*()', headers = [["Content-Type", "application/json"]], mime_type = "application/json" }
+
+# Test wrong content type mismatch
+[[mock_servers.routes]]
+method = "GET"
+path = "/api/wrong-content-type"
+delay_ms = 75
+response = { status = 200, body = '<html><body>HTML but claims JSON</body></html>', headers = [["Content-Type", "application/json"]], mime_type = "application/json" }
+
+# Test empty response with success status
+[[mock_servers.routes]]
+method = "DELETE"
+path = "/api/empty-success"
+delay_ms = 25
+response = { status = 200, body = '', headers = [["Content-Length", "0"]], mime_type = "application/json" }
+
+[[failure_scenarios]]
+name = "redis_connection_failure"
+target_service = "redis"
+failure_type = "stop"
+delay_seconds = 15
+duration_seconds = 10
+
+[[kafka_events]]
+topic = "test-events"
+partition = 0
+key = "config-update"
+value = '{"type": "config_change", "service": "api", "timestamp": "2024-01-15T10:00:00Z"}'
+delay_seconds = 5
